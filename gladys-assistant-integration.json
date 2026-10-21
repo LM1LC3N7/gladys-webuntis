@@ -1,177 +1,571 @@
 {
   "manifest_version": 1,
-  "type": "device",
-  "name": "Demo Devices Template",
+  "type": "provider",
+  "name": "WebUntis",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial connector: your WebUntis school timetable on the dashboard and in scenes.",
+    "fr": "Connecteur non officiel : l'emploi du temps WebUntis sur le tableau de bord et les scènes."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-webuntis:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-webuntis/main/cover.png",
+  "categories": ["services"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": { "en": "WebUntis timetable", "fr": "Emploi du temps WebUntis" },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial connector, not affiliated with Untis GmbH. It reads the timetable of a pupil or teacher account through the JSON-RPC interface of the school's WebUntis server, read only: lessons, cancellations, substitutions, exams. Use the account and server of the WebUntis web page of the school. The password is kept by Gladys in its database, never shown again, and sent only to the school's WebUntis server; it is never logged, nor the username, nor any class or pupil name. To be gentle with the school's server, the timetable is read every 30 minutes by default (15 at least). Never tested with a real account.",
+        "fr": "Connecteur non officiel, sans lien avec Untis GmbH. Il lit l'emploi du temps d'un compte élève ou enseignant par l'interface JSON-RPC du serveur WebUntis de l'école, en lecture seule : cours, annulations, remplacements, examens. Utilisez le compte et le serveur de la page web WebUntis de l'école. Le mot de passe est gardé par Gladys dans sa base, jamais réaffiché, et envoyé uniquement au serveur WebUntis de l'école ; il n'est jamais journalisé, pas plus que l'identifiant ni aucun nom de classe ou d'élève. Pour ménager le serveur de l'école, l'emploi du temps est lu toutes les 30 minutes par défaut (15 au minimum). Jamais testé avec un vrai compte."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-webuntis/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-webuntis/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
+      "key": "server",
+      "type": "string",
+      "label": { "en": "WebUntis server", "fr": "Serveur WebUntis" },
       "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+        "en": "The host of your school's WebUntis page, for example neilo.webuntis.com (the address of the page can be pasted as is). Always reached over HTTPS.",
+        "fr": "L'hôte de la page WebUntis de l'école, par exemple neilo.webuntis.com (l'adresse de la page peut être collée telle quelle). Toujours joint en HTTPS."
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "placeholder": { "en": "e.g. neilo.webuntis.com", "fr": "ex. neilo.webuntis.com" },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
+      "key": "school",
+      "type": "string",
+      "label": { "en": "School name", "fr": "Nom de l'école" },
       "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+        "en": "The school's login name in WebUntis: the \"school=\" part of the address of its WebUntis page.",
+        "fr": "Le nom de connexion de l'école dans WebUntis : la partie « school= » de l'adresse de sa page WebUntis."
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "placeholder": { "en": "e.g. demo-school", "fr": "ex. demo-school" },
+      "required": true
     },
     {
-      "key": "unit",
+      "key": "username",
+      "type": "string",
+      "label": { "en": "Username", "fr": "Identifiant" },
+      "description": {
+        "en": "The WebUntis username (pupil or teacher account). Never logged.",
+        "fr": "L'identifiant WebUntis (compte élève ou enseignant). Jamais journalisé."
+      },
+      "required": true
+    },
+    {
+      "key": "password",
+      "type": "secret",
+      "label": { "en": "Password", "fr": "Mot de passe" },
+      "description": {
+        "en": "Kept by Gladys in its database, never shown again, sent only to the school's WebUntis server. If WebUntis refuses it, nothing more is sent with it until you change it.",
+        "fr": "Gardé par Gladys dans sa base, jamais réaffiché, envoyé uniquement au serveur WebUntis de l'école. Si WebUntis le refuse, plus rien n'est envoyé avec lui tant que vous ne le changez pas."
+      },
+      "required": true
+    },
+    {
+      "key": "class_name",
+      "type": "string",
+      "label": { "en": "Class (optional)", "fr": "Classe (facultatif)" },
+      "description": {
+        "en": "Empty: the account's own timetable. A class name as WebUntis shows it: the timetable of that class (for an account without a timetable of its own, such as a parent account). Never logged.",
+        "fr": "Vide : l'emploi du temps du compte. Un nom de classe comme WebUntis l'affiche : l'emploi du temps de cette classe (pour un compte sans emploi du temps propre, comme un compte parent). Jamais journalisé."
+      },
+      "placeholder": { "en": "e.g. 7b", "fr": "ex. 7b" },
+      "required": false
+    },
+    {
+      "key": "time_zone",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "label": { "en": "Time zone of the school", "fr": "Fuseau horaire de l'école" },
       "required": false,
-      "default": "celsius",
+      "default": "Europe/Berlin",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "Europe/Berlin",
+          "label": { "en": "Germany (Berlin)", "fr": "Allemagne (Berlin)" }
+        },
+        {
+          "value": "Europe/Vienna",
+          "label": { "en": "Austria (Vienna)", "fr": "Autriche (Vienne)" }
+        },
+        {
+          "value": "Europe/Zurich",
+          "label": { "en": "Switzerland (Zurich)", "fr": "Suisse (Zurich)" }
+        },
+        {
+          "value": "Europe/Luxembourg",
+          "label": { "en": "Luxembourg", "fr": "Luxembourg" }
+        },
+        {
+          "value": "Europe/Brussels",
+          "label": { "en": "Belgium (Brussels)", "fr": "Belgique (Bruxelles)" }
+        },
+        {
+          "value": "Europe/Amsterdam",
+          "label": { "en": "Netherlands (Amsterdam)", "fr": "Pays-Bas (Amsterdam)" }
+        },
+        { "value": "Europe/Paris", "label": { "en": "France (Paris)", "fr": "France (Paris)" } },
+        { "value": "Europe/Rome", "label": { "en": "Italy (Rome)", "fr": "Italie (Rome)" } },
+        {
+          "value": "Europe/Prague",
+          "label": { "en": "Czechia (Prague)", "fr": "Tchéquie (Prague)" }
+        },
+        {
+          "value": "Europe/Budapest",
+          "label": { "en": "Hungary (Budapest)", "fr": "Hongrie (Budapest)" }
+        },
+        {
+          "value": "Europe/Bratislava",
+          "label": { "en": "Slovakia (Bratislava)", "fr": "Slovaquie (Bratislava)" }
+        },
+        {
+          "value": "Europe/Ljubljana",
+          "label": { "en": "Slovenia (Ljubljana)", "fr": "Slovénie (Ljubljana)" }
+        },
+        {
+          "value": "Europe/London",
+          "label": { "en": "United Kingdom (London)", "fr": "Royaume-Uni (Londres)" }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
+      "key": "poll_minutes",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "label": { "en": "Reading interval (minutes)", "fr": "Intervalle de lecture (minutes)" },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "How often the timetable is read (one login, one timetable, one logout). 30 by default, 15 at least: the school's server is shared.",
+        "fr": "Fréquence de lecture de l'emploi du temps (une connexion, un emploi du temps, une déconnexion). 30 par défaut, 15 au minimum : le serveur de l'école est partagé."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 30,
+      "min": 15,
+      "max": 240
+    },
+    {
+      "key": "lookahead_days",
+      "type": "number",
+      "label": { "en": "Days read ahead", "fr": "Jours lus à l'avance" },
+      "description": {
+        "en": "The timetable is read from today to this many days ahead (7 by default, covering the next school day after a weekend).",
+        "fr": "L'emploi du temps est lu d'aujourd'hui jusqu'à ce nombre de jours (7 par défaut, ce qui couvre le prochain jour d'école après un week-end)."
+      },
+      "required": false,
+      "default": 7,
+      "min": 1,
+      "max": 14
+    },
+    {
+      "key": "day_start_notice_minutes",
+      "type": "number",
+      "label": {
+        "en": "\"School day starts\": minutes before the first lesson",
+        "fr": "« Début des cours » : minutes avant le premier cours"
+      },
+      "description": {
+        "en": "The \"school day starts\" trigger fires this many minutes before the first lesson held (60 by default, 0 at the start of the lesson).",
+        "fr": "Le déclencheur « début des cours » part ce nombre de minutes avant le premier cours maintenu (60 par défaut, 0 au début du cours)."
+      },
+      "required": false,
+      "default": 60,
+      "min": 0,
+      "max": 240
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
+      "key": "test_connection",
+      "timeout_seconds": 90,
+      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "description": {
+        "en": "Reads the timetable when a reading is due, and shows the result; never reads sooner than the interval.",
+        "fr": "Lit l'emploi du temps quand une lecture est due, et affiche le résultat ; ne lit jamais avant la fin de l'intervalle."
+      }
+    }
+  ],
+  "widgets": [
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
+      "key": "timetable",
+      "label": { "en": "School timetable", "fr": "Emploi du temps" },
+      "description": {
+        "en": "The lessons of a school day, with cancellations, substitutions and exams.",
+        "fr": "Les cours d'une journée d'école, avec annulations, remplacements et examens."
+      },
+      "icon": "book-open",
+      "settings": [
         {
-          "key": "device",
+          "key": "day",
           "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "required": false,
+          "default": "auto",
+          "label": { "en": "Day shown", "fr": "Jour affiché" },
+          "options": [
+            {
+              "value": "auto",
+              "label": {
+                "en": "Today, then the next school day",
+                "fr": "Aujourd'hui, puis le prochain jour d'école"
+              }
+            },
+            { "value": "today", "label": { "en": "Today", "fr": "Aujourd'hui" } },
+            { "value": "tomorrow", "label": { "en": "Tomorrow", "fr": "Demain" } },
+            {
+              "value": "next_school_day",
+              "label": { "en": "Next school day", "fr": "Prochain jour d'école" }
+            }
+          ]
         }
       ]
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "lesson_cancelled",
+      "label": { "en": "Lesson cancelled (WebUntis)", "fr": "Cours annulé (WebUntis)" },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "A lesson of the coming days is now cancelled. Seen at the next reading (every 30 minutes by default).",
+        "fr": "Un cours des prochains jours est désormais annulé. Vu à la lecture suivante (toutes les 30 minutes par défaut)."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "key": "subject",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Subject, short name as in WebUntis (empty: any)",
+            "fr": "Matière, nom court comme dans WebUntis (vide : toutes)"
+          },
+          "placeholder": { "en": "e.g. M", "fr": "ex. M" }
         },
         {
-          "key": "target",
+          "key": "day",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "required": false,
+          "label": { "en": "When (none ticked: any)", "fr": "Quand (aucun coché : tous)" },
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            { "value": "today", "label": { "en": "Today", "fr": "Aujourd'hui" } },
+            { "value": "tomorrow", "label": { "en": "Tomorrow", "fr": "Demain" } },
+            { "value": "later", "label": { "en": "Later", "fr": "Plus tard" } }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "subject",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": { "en": "Subject (short)", "fr": "Matière (court)" }
+        },
+        { "key": "subject_name", "type": "string", "label": { "en": "Subject", "fr": "Matière" } },
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } },
+        {
+          "key": "weekday",
+          "type": "string",
+          "label": { "en": "Weekday (mon to sun)", "fr": "Jour (mon à sun)" }
+        },
+        {
+          "key": "day",
+          "type": "string",
+          "label": { "en": "When (today, tomorrow, later)", "fr": "Quand (today, tomorrow, later)" }
+        },
+        {
+          "key": "days_ahead",
+          "type": "number",
+          "label": { "en": "Days ahead", "fr": "Jours d'avance" }
+        },
+        {
+          "key": "start",
+          "type": "string",
+          "label": { "en": "Start time", "fr": "Heure de début" }
+        },
+        { "key": "end", "type": "string", "label": { "en": "End time", "fr": "Heure de fin" } },
+        { "key": "room", "type": "string", "label": { "en": "Room", "fr": "Salle" } },
+        { "key": "teacher", "type": "string", "label": { "en": "Teacher", "fr": "Enseignant" } },
+        {
+          "key": "original_room",
+          "type": "string",
+          "label": { "en": "Room planned", "fr": "Salle prévue" }
+        },
+        {
+          "key": "original_teacher",
+          "type": "string",
+          "label": { "en": "Teacher planned", "fr": "Enseignant prévu" }
+        },
+        {
+          "key": "text",
+          "type": "string",
+          "label": { "en": "School's text", "fr": "Texte de l'école" }
+        },
+        { "key": "exam", "type": "boolean", "label": { "en": "Exam", "fr": "Examen" } }
+      ]
+    },
+    {
+      "key": "lesson_changed",
+      "label": { "en": "Lesson changed (WebUntis)", "fr": "Cours modifié (WebUntis)" },
+      "description": {
+        "en": "A lesson of the coming days has a substitution: another teacher, room or time, or a text of the school. Fires again on each new change.",
+        "fr": "Un cours des prochains jours a un remplacement : autre enseignant, salle ou horaire, ou un texte de l'école. Repart à chaque nouveau changement."
+      },
+      "fields": [
+        {
+          "key": "subject",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Subject, short name as in WebUntis (empty: any)",
+            "fr": "Matière, nom court comme dans WebUntis (vide : toutes)"
+          },
+          "placeholder": { "en": "e.g. M", "fr": "ex. M" }
+        },
+        {
+          "key": "day",
+          "type": "multi_select",
+          "required": false,
+          "label": { "en": "When (none ticked: any)", "fr": "Quand (aucun coché : tous)" },
+          "options": [
+            { "value": "today", "label": { "en": "Today", "fr": "Aujourd'hui" } },
+            { "value": "tomorrow", "label": { "en": "Tomorrow", "fr": "Demain" } },
+            { "value": "later", "label": { "en": "Later", "fr": "Plus tard" } }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "key": "subject",
+          "type": "string",
+          "label": { "en": "Subject (short)", "fr": "Matière (court)" }
+        },
+        { "key": "subject_name", "type": "string", "label": { "en": "Subject", "fr": "Matière" } },
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } },
+        {
+          "key": "weekday",
+          "type": "string",
+          "label": { "en": "Weekday (mon to sun)", "fr": "Jour (mon à sun)" }
+        },
+        {
+          "key": "day",
+          "type": "string",
+          "label": { "en": "When (today, tomorrow, later)", "fr": "Quand (today, tomorrow, later)" }
+        },
+        {
+          "key": "days_ahead",
+          "type": "number",
+          "label": { "en": "Days ahead", "fr": "Jours d'avance" }
+        },
+        {
+          "key": "start",
+          "type": "string",
+          "label": { "en": "Start time", "fr": "Heure de début" }
+        },
+        { "key": "end", "type": "string", "label": { "en": "End time", "fr": "Heure de fin" } },
+        { "key": "room", "type": "string", "label": { "en": "Room", "fr": "Salle" } },
+        { "key": "teacher", "type": "string", "label": { "en": "Teacher", "fr": "Enseignant" } },
+        {
+          "key": "original_room",
+          "type": "string",
+          "label": { "en": "Room planned", "fr": "Salle prévue" }
+        },
+        {
+          "key": "original_teacher",
+          "type": "string",
+          "label": { "en": "Teacher planned", "fr": "Enseignant prévu" }
+        },
+        {
+          "key": "text",
+          "type": "string",
+          "label": { "en": "School's text", "fr": "Texte de l'école" }
+        },
+        { "key": "exam", "type": "boolean", "label": { "en": "Exam", "fr": "Examen" } }
+      ]
+    },
+    {
+      "key": "school_day_starts",
+      "label": { "en": "School day starts (WebUntis)", "fr": "Début des cours (WebUntis)" },
+      "description": {
+        "en": "Once a school day, the configured number of minutes before the first lesson held (a cancelled first lesson moves it).",
+        "fr": "Une fois par jour d'école, le nombre de minutes configuré avant le premier cours maintenu (un premier cours annulé le décale)."
+      },
+      "fields": [
+        {
+          "key": "weekday",
+          "type": "multi_select",
+          "required": false,
+          "label": { "en": "Days (none ticked: any)", "fr": "Jours (aucun coché : tous)" },
+          "options": [
+            { "value": "mon", "label": { "en": "Monday", "fr": "Lundi" } },
+            { "value": "tue", "label": { "en": "Tuesday", "fr": "Mardi" } },
+            { "value": "wed", "label": { "en": "Wednesday", "fr": "Mercredi" } },
+            { "value": "thu", "label": { "en": "Thursday", "fr": "Jeudi" } },
+            { "value": "fri", "label": { "en": "Friday", "fr": "Vendredi" } },
+            { "value": "sat", "label": { "en": "Saturday", "fr": "Samedi" } },
+            { "value": "sun", "label": { "en": "Sunday", "fr": "Dimanche" } }
+          ]
+        }
+      ],
+      "variables": [
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } },
+        {
+          "key": "weekday",
+          "type": "string",
+          "label": { "en": "Weekday (mon to sun)", "fr": "Jour (mon à sun)" }
+        },
+        {
+          "key": "first_start",
+          "type": "string",
+          "label": { "en": "First lesson: start", "fr": "Premier cours : début" }
+        },
+        {
+          "key": "first_subject",
+          "type": "string",
+          "label": { "en": "First lesson: subject", "fr": "Premier cours : matière" }
+        },
+        {
+          "key": "first_room",
+          "type": "string",
+          "label": { "en": "First lesson: room", "fr": "Premier cours : salle" }
+        },
+        {
+          "key": "last_end",
+          "type": "string",
+          "label": { "en": "End of the day", "fr": "Fin de la journée" }
+        },
+        {
+          "key": "lesson_count",
+          "type": "number",
+          "label": { "en": "Lessons held", "fr": "Cours maintenus" }
+        },
+        {
+          "key": "cancelled_count",
+          "type": "number",
+          "label": { "en": "Lessons cancelled", "fr": "Cours annulés" }
+        },
+        {
+          "key": "changed_count",
+          "type": "number",
+          "label": { "en": "Lessons changed", "fr": "Cours modifiés" }
+        },
+        { "key": "exam_count", "type": "number", "label": { "en": "Exams", "fr": "Examens" } },
+        {
+          "key": "late_start",
+          "type": "boolean",
+          "label": { "en": "Starts later than planned", "fr": "Commence plus tard que prévu" }
+        },
+        {
+          "key": "minutes_before",
+          "type": "number",
+          "label": {
+            "en": "Minutes before the first lesson",
+            "fr": "Minutes avant le premier cours"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "get_school_day",
+      "label": {
+        "en": "Read a school day (WebUntis)",
+        "fr": "Lire une journée d'école (WebUntis)"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "The lessons of a day from the last reading (no new request), for a message or a condition that follows.",
+        "fr": "Les cours d'une journée d'après la dernière lecture (sans nouvelle requête), pour un message ou une condition qui suit."
+      },
+      "timeout_seconds": 10,
       "fields": [
         {
-          "key": "device",
+          "key": "day",
           "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "required": false,
+          "default": "today",
+          "label": { "en": "Day", "fr": "Jour" },
+          "options": [
+            {
+              "value": "auto",
+              "label": {
+                "en": "Today, then the next school day",
+                "fr": "Aujourd'hui, puis le prochain jour d'école"
+              }
+            },
+            { "value": "today", "label": { "en": "Today", "fr": "Aujourd'hui" } },
+            { "value": "tomorrow", "label": { "en": "Tomorrow", "fr": "Demain" } },
+            {
+              "value": "next_school_day",
+              "label": { "en": "Next school day", "fr": "Prochain jour d'école" }
+            }
+          ]
         }
       ],
       "outputs": [
+        { "key": "date", "type": "string", "label": { "en": "Date", "fr": "Date" } },
         {
-          "key": "signalled",
+          "key": "weekday",
+          "type": "string",
+          "label": { "en": "Weekday (mon to sun)", "fr": "Jour (mon à sun)" }
+        },
+        {
+          "key": "has_school",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": { "en": "Lessons held", "fr": "Cours maintenus" }
+        },
+        {
+          "key": "lesson_count",
+          "type": "number",
+          "label": { "en": "Number of lessons held", "fr": "Nombre de cours maintenus" }
+        },
+        {
+          "key": "cancelled_count",
+          "type": "number",
+          "label": { "en": "Lessons cancelled", "fr": "Cours annulés" }
+        },
+        {
+          "key": "changed_count",
+          "type": "number",
+          "label": { "en": "Lessons changed", "fr": "Cours modifiés" }
+        },
+        { "key": "exam_count", "type": "number", "label": { "en": "Exams", "fr": "Examens" } },
+        {
+          "key": "first_start",
+          "type": "string",
+          "label": { "en": "First lesson: start", "fr": "Premier cours : début" }
+        },
+        {
+          "key": "first_subject",
+          "type": "string",
+          "label": { "en": "First lesson: subject", "fr": "Premier cours : matière" }
+        },
+        {
+          "key": "last_end",
+          "type": "string",
+          "label": { "en": "End of the day", "fr": "Fin de la journée" }
+        },
+        {
+          "key": "late_start",
+          "type": "boolean",
+          "label": { "en": "Starts later than planned", "fr": "Commence plus tard que prévu" }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "label": { "en": "Lessons, one per line", "fr": "Cours, un par ligne" }
+        },
+        {
+          "key": "read_at",
+          "type": "string",
+          "label": { "en": "Time of the reading", "fr": "Heure de la lecture" }
         }
       ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
     }
   ]
 }

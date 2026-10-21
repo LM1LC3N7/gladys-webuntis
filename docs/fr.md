@@ -1,67 +1,103 @@
-# Template de démonstration
+# WebUntis
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Connecteur non officiel, sans lien avec Untis GmbH. Il lit un emploi du temps
+scolaire **WebUntis**, en lecture seule, et l'amène dans Gladys : un widget de
+tableau de bord, des déclencheurs de scène quand un cours est annulé ou
+modifié et au début des cours, et une action de scène pour lire une journée
+d'école.
 
-## Ce que vous obtenez
+**Jamais testé avec un vrai compte** : il a été construit d'après l'interface
+JSON-RPC de WebUntis telle que l'utilise la bibliothèque libre python-webuntis.
+Merci de signaler ce qui marche et ce qui ne marche pas.
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+## Ce qu'il faut
+
+- L'adresse de la page WebUntis de l'école, par exemple
+  `https://neilo.webuntis.com/WebUntis/?school=demo-school#/basic/login`.
+- Un compte WebUntis **élève ou enseignant** de cette école (identifiant et
+  mot de passe). Un compte parent n'a pas d'emploi du temps à lui : saisissez
+  aussi le nom de la classe (voir plus bas).
 
 ## Configuration
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+| Champ                               | Quoi saisir                                                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Serveur WebUntis                    | L'hôte de la page (`neilo.webuntis.com`) ; l'adresse complète peut être collée. Toujours joint en HTTPS.                  |
+| Nom de l'école                      | La partie `school=` de l'adresse (`demo-school`).                                                                         |
+| Identifiant, mot de passe           | Le compte WebUntis.                                                                                                       |
+| Classe (facultatif)                 | Vide : l'emploi du temps du compte. Un nom de classe comme WebUntis l'affiche (`7b`) : l'emploi du temps de cette classe. |
+| Fuseau horaire de l'école           | Berlin par défaut (Vienne, Zurich et d'autres proposés).                                                                  |
+| Intervalle de lecture               | 30 minutes par défaut, 15 au minimum.                                                                                     |
+| Jours lus à l'avance                | 7 par défaut (aujourd'hui et la semaine suivante).                                                                        |
+| « Début des cours » : minutes avant | 60 par défaut.                                                                                                            |
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+Le mot de passe est gardé par Gladys dans sa base, jamais réaffiché, et envoyé
+uniquement au serveur WebUntis de l'école, dans la requête de connexion.
+L'intégration ne journalise jamais l'identifiant, le mot de passe, l'école,
+une classe ni le nom d'un élève, ni les cours : seulement des nombres et des
+codes d'erreur.
 
-## Actions
+## Comment il lit
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+Chaque lecture est une courte session : connexion, l'emploi du temps
+d'aujourd'hui jusqu'aux jours à l'avance, déconnexion. Pour ménager le serveur
+de l'école, que tous les élèves partagent :
 
-## Scènes
+- une lecture toutes les 30 minutes par défaut, jamais plus d'une toutes les
+  15 minutes ;
+- rien ne lit plus tôt : ni le bouton « Tester la connexion », ni un
+  redémarrage de l'intégration, ni une reconnexion à Gladys, ni
+  l'enregistrement d'une configuration inchangée (l'heure de la dernière
+  tentative est conservée) ;
+- quand le serveur répond « trop de requêtes » (429) ou a un problème (5xx),
+  les lectures se mettent en pause (son Retry-After, ou 30 minutes ; 6 heures
+  au plus), y compris à travers un redémarrage ;
+- quand WebUntis **refuse l'identifiant ou le mot de passe**, plus rien n'est
+  envoyé avec eux, même après un redémarrage, tant que vous ne les changez pas.
+  Le bouton de test peut réessayer une fois, pas avant la fin de l'intervalle.
+  Plusieurs connexions ratées peuvent bloquer un compte WebUntis : vérifiez
+  d'abord le mot de passe sur la page de l'école.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+## Widget « Emploi du temps »
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+Les cours d'une journée : heure, matière, salle et enseignant ; un cours annulé
+en rouge, un cours modifié en orange, un examen en bleu ; l'heure de la
+lecture. Choisissez le jour affiché : aujourd'hui puis le prochain jour d'école
+(par défaut), aujourd'hui, demain, ou le prochain jour d'école.
 
-## Tableau de bord
+## Déclencheurs de scène
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+| Déclencheur     | Quand                                                                                                                   | Filtres                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Cours annulé    | Un cours des prochains jours est désormais annulé.                                                                      | Matière (nom court), quand (aujourd'hui, demain, plus tard). |
+| Cours modifié   | Un cours a un remplacement : autre enseignant, salle ou horaire, ou un texte de l'école. À nouveau à chaque changement. | Matière, quand.                                              |
+| Début des cours | Une fois par jour d'école, le nombre de minutes configuré avant le premier cours maintenu.                              | Jours de la semaine.                                         |
 
-## Dépannage
+Un changement est vu à la lecture suivante (toutes les 30 minutes par défaut),
+pas en direct. La première lecture après la configuration ne fait que retenir
+l'emploi du temps : elle ne déclenche rien. Les cours passés ne déclenchent
+jamais rien.
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Les variables des déclencheurs s'utilisent sous la forme
+`{{triggerEvent.data.<clé>}}`, par exemple `{{triggerEvent.data.subject}}`,
+`{{triggerEvent.data.start}}`, `{{triggerEvent.data.room}}`,
+`{{triggerEvent.data.text}}`, ou pour « début des cours »
+`{{triggerEvent.data.first_start}}` et `{{triggerEvent.data.late_start}}`
+(vrai quand le premier cours est annulé).
+
+## Action de scène « Lire une journée d'école »
+
+Les cours d'une journée d'après la dernière lecture (sans nouvelle requête) :
+date, cours maintenus, annulés, modifiés, examens, premier début, première
+matière, fin de la journée, la liste un cours par ligne. Pratique pour un
+message du matin.
+
+## Limites
+
+- Lecture seule : ni devoirs, ni messages, ni absences (ils ne sont pas dans
+  l'interface JSON-RPC qu'utilise l'intégration).
+- Un emploi du temps par intégration.
+- Un cours modifié quelques minutes avant son début peut être vu après qu'il a
+  commencé (l'intervalle).
+- Certaines écoles désactivent l'interface JSON-RPC ou ne donnent pas aux
+  élèves le droit d'y lire leur emploi du temps : le statut le dit alors.

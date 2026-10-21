@@ -1,76 +1,80 @@
 # CLAUDE.md
 
-Project rules for coding assistants (Claude Code reads this file) and for human
-contributors.
+Project rules for coding assistants (Claude Code reads this file) and for
+human contributors.
 
 ## What this is
 
-A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
-no build step) that runs in its own sandboxed Docker container and talks to
-Gladys through
-[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
-its only runtime dependency. It started from the official JavaScript template.
+A Gladys Assistant **external integration** of type `provider` (no device): a
+Node.js service (Node 22+, ESM, no build step) in its own sandboxed Docker
+container, talking to Gladys through `@gladysassistant/integration-sdk`
+(v0.15). It reads a **WebUntis** school timetable, read only, through the
+JSON-RPC interface of the school's server, ported from python-webuntis
+(BSD-3-Clause, `THIRD_PARTY_NOTICES.md`). Unofficial: not affiliated with
+Untis GmbH. Same shape as `gladys-todoist`.
 
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/app.test.js              # one file
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
-npm run format                            # Prettier, fix in place
+npm run audit                             # npm audit --omit=dev
 npx github:GladysAssistant/integration-store .   # store admission checks
 ```
 
-The CI (`.github/workflows/ci.yml`) runs `format:check`, `lint` and `test` on
-Node 22 and 24, and builds the Docker image: run the three commands before
-pushing.
+Run `format:check`, `lint`, `test` (Node 22 and 24) and `audit` before every
+commit.
 
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
-gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
-.github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
+index.js                  SDK wiring only (handlers registered before connect())
+src/app.js                WebUntisApp: lifecycle, scheduler, reading, status, triggers,
+                          scene action, widget, test button
+src/webuntis/client.js    JSON-RPC client (python-webuntis remote.py, session.py)
+src/webuntis/model.js     periods -> lessons (objects.py); every period field name is here
+src/day.js                the day shown, summary, lines (pure)
+src/triggers.js           readings and the clock -> scene events (pure)
+src/widget.js             the "timetable" widget (pure)
+src/store.js              the /data file (normalized, bounded)
+src/time.js               wall times in an IANA zone, WebUntis dates and times (pure)
+src/http.js               the only network access: bounded size and time, no redirect
+src/config.js, constants.js, i18n.js
+scripts/cover.mjs         cover.png (800 × 534), plain Node
+test/helpers/             a fake WebUntis behind fetch, fake timers and clock
 ```
 
 ## Rules
 
-- **External ids are forever.** Build them with
-  `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
-  platform gives the device (serial, cloud id, MAC), never a label. Gladys keys
-  devices, their history, scenes and dashboards on them: changing one creates a
-  new device and orphans the old one. The same goes for every key users store:
-  manifest `config_schema`, `actions`, widget and scene keys, feature keys.
-- **The container rootfs is read-only.** Write only under `/data`, the one
-  writable volume. Never log tokens, passwords or API keys.
-- **Versions belong to the Release workflow** (Actions → Release). Never edit
-  `version` in `package.json` or in the manifest, nor the `docker_image` tag,
-  by hand — except on the README's hand-pushed tag path, which bumps all three
-  together before tagging. `test/manifest.test.js` checks they agree.
-- **Changelog.** Every user-visible change adds a line under `## [Unreleased]`
-  in `CHANGELOG.md` (`### Added`, `Changed`, `Fixed`, `Removed`, `Security`).
-  Never write a version heading: the Release workflow moves the section, and it
-  becomes the notes of the GitHub Release.
-- **Manifest.** Texts are multi-language objects `{ "en": ..., "fr": ... }`:
-  `label`, `description` and `placeholder` alike, never a plain string. The
-  catalog `description` holds 10 to 100 characters per language. A field the
-  older cores do not know needs a higher `gladys_version` minimum
-  (`categories`: 4.86.0; `widgets`, `scene_triggers`, `scene_actions`,
-  `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
-  code (defaults, action, scene and widget handlers): change both sides
-  together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
-- **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
-  in English. Tests never touch the network.
+- **Read only.** No device, no command, no widget button.
+- **Minors' data.** Never log, show in a status or an error, nor write to
+  `/data`: the username (often the pupil's name), the password, the school,
+  a class name, a pupil, a lesson. Logs carry counts and error codes only.
+  `getTimetable` asks for class ids only (`klasseFields: ['id']`).
+- **The password** is a `secret` field: "kept by Gladys in its database, never
+  shown again", never "encrypted" (a test refuses the word). Sent only in the
+  `authenticate` request, over HTTPS, never after a redirection
+  (`redirect: 'manual'`).
+- **Be gentle with the school's server.** One reading per `poll_minutes`
+  (never below 15); the last attempt is kept in `/data` (written at most once
+  a minute) and nothing reads sooner: restart, `connected`, unchanged config,
+  test button. A reading in progress is joined, never doubled. 429/5xx:
+  persisted pause, 60 s to 6 h. A refused login (`-8504`) or unknown school
+  (`-8500`): persisted stop for these credentials (HMAC of the refused ones
+  only, erased at the first success); the test button may try once more after
+  the interval. Never a second login in the same reading.
+- **Generations.** A reading of a former configuration publishes nothing and
+  sets no status (checked after every await).
+- **Events**: one per transition, never on the first reading of a timetable
+  (`primed` in `/data`), never for a past lesson, at most 20 per kind per
+  reading; every value a string, a finite number, a boolean or null.
+- **Keys are forever**: manifest keys (`src/constants.js`), trigger fields and
+  variables, action outputs, widget settings.
+- **Versions belong to the Release workflow**; 0.1.0 was set by hand for the
+  first milestone. Every user-visible change adds a line under
+  `## [Unreleased]` in `CHANGELOG.md`.
+- **User-facing text** is bilingual, `docs/en.md` and `docs/fr.md` in sync.
+  Comments explain why, in English. Tests never touch the network.

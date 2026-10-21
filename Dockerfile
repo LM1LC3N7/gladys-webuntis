@@ -16,18 +16,18 @@ RUN apk add --no-cache dumb-init
 WORKDIR /app
 
 # Install the PROD dependencies first (better build cache).
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev || npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
-# Then the integration code.
+# Then the integration code, its license and the notice of python-webuntis
+# (BSD-3-Clause: the notice ships with every binary redistribution).
 COPY index.js ./
 COPY src ./src
-COPY gladys-assistant-integration.json ./
+COPY gladys-assistant-integration.json LICENSE THIRD_PARTY_NOTICES.md ./
 
 # The only writable location allowed at runtime. Docker creates a new volume
 # with the owner of the image's /data, so it must belong to `node`, and before
-# VOLUME: changes made to /data after it are discarded. Without this, /data is
-# root-owned and the integration cannot write to it.
+# VOLUME: changes made to /data after it are discarded.
 ENV NODE_ENV=production
 RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
