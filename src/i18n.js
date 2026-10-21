@@ -49,6 +49,18 @@ export const T = {
     en: 'WebUntis does not know this school name on this server: copy the school name from the WebUntis page (the "school=" part of its address), then save the configuration.',
     fr: 'WebUntis ne connaît pas ce nom d’école sur ce serveur : copiez le nom d’école depuis la page WebUntis (la partie « school= » de son adresse), puis enregistrez la configuration.',
   },
+  accountBlocked: {
+    en: 'WebUntis says this account is blocked: nothing more is sent with it. Unblock it on the WebUntis page of the school (or ask the school), then click "Test the connection" (one try, no sooner than the interval).',
+    fr: 'WebUntis indique que ce compte est bloqué : plus rien n’est envoyé avec lui. Débloquez-le sur la page WebUntis de l’école (ou demandez à l’école), puis cliquez sur « Tester la connexion » (un essai, pas avant la fin de l’intervalle).',
+  },
+  loginRefused: {
+    en: 'WebUntis refused the login: nothing more is sent with these credentials. Check the account on the WebUntis page of the school (expired password, second factor...), then save the configuration.',
+    fr: 'WebUntis a refusé la connexion : plus rien n’est envoyé avec ces identifiants. Vérifiez le compte sur la page WebUntis de l’école (mot de passe expiré, double authentification…), puis enregistrez la configuration.',
+  },
+  forbidden: (minutes) => ({
+    en: `The school’s server refused the access (HTTP 401/403): paused for ${minutes} min.`,
+    fr: `Le serveur de l’école a refusé l’accès (HTTP 401/403) : en pause pour ${minutes} min.`,
+  }),
   needsClass: {
     en: 'This account has no timetable of its own (a parent account?): enter the class name in the configuration.',
     fr: 'Ce compte n’a pas d’emploi du temps à lui (un compte parent ?) : saisissez le nom de la classe dans la configuration.',

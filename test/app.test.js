@@ -274,31 +274,47 @@ test('a reconnection or an unchanged configuration never starts another reading'
   assert.equal(gladys.fake.connectionStatus.connected, true, 'the status is published again');
 });
 
-test('a late answer of a former configuration publishes nothing', async () => {
+test('a late answer of a former configuration publishes nothing; never two sessions at once', async () => {
   let release;
   const { app, gladys } = await setup({ connect: false });
-  webuntis.intercept = (call) =>
-    call.method === 'getTimetable' && call.params.options.element.type === 5
+  webuntis.periods = (params) =>
+    params.options.element.type === 1 ? [period({ id: 9, subject: 'KL' })] : WEEK();
+  let open = 0;
+  let most = 0;
+  webuntis.intercept = (call) => {
+    if (call.method === 'authenticate') {
+      open += 1;
+      most = Math.max(most, open);
+    }
+    if (call.method === 'logout') {
+      open -= 1;
+    }
+    return call.method === 'getTimetable' && call.params.options.element.type === 5
       ? (body) =>
           new Promise((resolve) => {
             release = () => resolve(json({ jsonrpc: '2.0', id: body.id, result: WEEK() }));
           })
       : undefined;
+  };
   const connecting = gladys.connect();
   await new Promise((resolve) => setImmediate(resolve));
   // Another timetable (a class) while the first reading waits.
-  await app.configUpdated({ ...CONFIG, class_name: '7B ' });
-  assert.equal(count('getKlassen'), 1);
-  const before = gladys.fake.connectionStatuses.length;
-  const lessons = app.lessons;
+  const updating = app.configUpdated({ ...CONFIG, class_name: '7B ' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(count('getKlassen'), 0, 'the new reading waits for the logout of the old one');
   release();
   await connecting;
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(gladys.fake.connectionStatuses.length, before, 'no status from the old reading');
-  assert.equal(app.lessons, lessons, 'the old lessons are not kept');
+  await updating;
+  await app.reading;
+  assert.equal(most, 1, 'one session at a time');
+  assert.equal(count('getKlassen'), 1);
+  assert.deepEqual(
+    app.lessons.map((l) => l.subject),
+    ['KL'],
+    'only the class reading is kept',
+  );
   assert.equal(gladys.fake.sceneEvents.length, 0);
 });
-
 test('refused credentials: persisted stop, spaced new try on the test button only, erased by a success', async () => {
   const store = memoryStore();
   const clock = createClock(START);
@@ -521,4 +537,153 @@ test('nothing configured, or a server that is not a host name', async () => {
   assert.deepEqual(validateWidgetContent(widget.data.content), []);
   const action = await empty.gladys.fake.sceneAction(SCENE_ACTIONS.GET_DAY, {});
   assert.equal(action.success, false);
+});
+
+// --- Review 1 --------------------------------------------------------------------
+
+const rpcError =
+  (code, method = 'authenticate') =>
+  (call) =>
+    call.method === method
+      ? (body) => json({ jsonrpc: '2.0', id: body.id, error: { code, message: 'refused' } })
+      : undefined;
+
+test('review I1: a blocked account or an unknown login error is never tried again by itself', async () => {
+  for (const [code, text] of [
+    [-8998, /account is blocked/],
+    [-8502, /refused the login/],
+  ]) {
+    const store = memoryStore();
+    const clock = createClock(START);
+    webuntis = installWebUntis({ periods: WEEK() });
+    webuntis.intercept = rpcError(code);
+    const first = await setup({ store, clock });
+    assert.match(first.gladys.fake.connectionStatus.message.en, text);
+    await first.minute(24 * 60);
+    assert.equal(count('authenticate'), 1, `${code}: no login in 24 h`);
+    await first.app.shutdown();
+    const second = await setup({ store, clock });
+    await second.minute(60);
+    assert.equal(count('authenticate'), 1, `${code}: nor after a restart`);
+    webuntis.restore();
+    webuntis = undefined;
+  }
+});
+
+test('review I1: HTTP 403 on the login pauses 6 hours, persisted', async () => {
+  webuntis = installWebUntis({ periods: WEEK() });
+  webuntis.intercept = (call) => (call.method === 'authenticate' ? json({}, 403) : undefined);
+  const { store, clock, minute, gladys } = await setup();
+  assert.equal(store.data.pause.until, clock.now() + 6 * 60 * MINUTE);
+  assert.equal(store.data.pause.reason, 'forbidden');
+  assert.match(gladys.fake.connectionStatus.message.en, /refused the access/);
+  await minute(6 * 60 - 1);
+  assert.equal(count('authenticate'), 1);
+});
+
+const LONG = 'Vertretung Frau Schmidt, Lena M. schreibt nach'.padEnd(290, ' x');
+const changedWeek = () =>
+  WEEK().map((p) =>
+    p.id === 4
+      ? period({
+          id: 4,
+          date: 20261022,
+          start: 755,
+          end: 840,
+          subject: 'BIO',
+          room: 'R7',
+          orgRoom: 'R8',
+          orgTeacher: 'ABC',
+          teacher: 'XYZ',
+          substText: LONG,
+        })
+      : p,
+  );
+
+test('review I2/I3: /data holds hashes and dates only; a long change is not fired again after a restart', async () => {
+  const store = memoryStore();
+  const clock = createClock(START);
+  const first = await setup({ store, clock });
+  webuntis.periods = changedWeek();
+  await first.minute(30);
+  assert.equal(
+    first.gladys.fake.sceneEvents.filter((e) => e.key === SCENE_TRIGGERS.CHANGED).length,
+    1,
+  );
+  const saved = JSON.stringify(store.data.announced);
+  for (const clear of ['BIO', 'R7', 'XYZ', 'Schmidt', 'Lena', '07:55', '|M|', 'R101', '09:55']) {
+    assert.equal(saved.includes(clear), false, `${clear} in /data`);
+  }
+  for (const [key, value] of store.data.announced) {
+    assert.match(key, /^[cx]\|[0-9a-f]{32}$/);
+    assert.match(value, /^\d{4}-\d{2}-\d{2}\|(?:[0-9a-f]{32})?$/);
+  }
+  await first.app.shutdown();
+  const second = await setup({ store, clock });
+  await second.minute(30);
+  assert.equal(count('authenticate'), 3);
+  assert.equal(second.gladys.fake.sceneEvents.length, 0, 'nothing changed: nothing fires');
+});
+
+test('review I4: the marks are on disk before the events are published', async () => {
+  const store = memoryStore();
+  const { gladys, minute } = await setup({ store });
+  const publish = gladys.publishSceneEvent.bind(gladys);
+  const onDisk = [];
+  gladys.publishSceneEvent = (key, data) => {
+    if (key === SCENE_TRIGGERS.CANCELLED) {
+      onDisk.push(store.data.announced.length);
+    }
+    return publish(key, data);
+  };
+  webuntis.periods = WEEK().map((p) => (p.id === 2 ? { ...p, code: 'cancelled' } : p));
+  await minute(30);
+  assert.equal(onDisk.length, 1);
+  assert.equal(onDisk[0], 2, 'both cancellations were written before the event left');
+});
+
+test('review M1: a test click that meets a network error keeps the refusal', async () => {
+  const store = memoryStore();
+  const clock = createClock(START);
+  const { gladys, minute } = await setup({
+    store,
+    clock,
+    config: { ...CONFIG, password: 'wrong' },
+  });
+  clock.advance(30 * MINUTE);
+  webuntis.intercept = () => {
+    throw new TypeError('fetch failed');
+  };
+  await gladys.fake.action(ACTIONS.TEST);
+  assert.equal(count('authenticate'), 2);
+  assert.match(store.data.refused.hash, /^[0-9a-f]{64}$/);
+  webuntis.intercept = undefined;
+  await minute(180);
+  assert.equal(count('authenticate'), 2, 'no automatic login with the refused password');
+});
+
+test('review M5: hundreds of future cancellations are announced once only', async () => {
+  const many = () =>
+    Array.from({ length: 450 }, (_, i) =>
+      period({
+        id: 1000 + i,
+        date: 20261022 + Math.floor(i / 90),
+        start: 700 + (i % 90) * 0,
+        end: 745,
+        subject: `S${i}`,
+        code: 'cancelled',
+      }),
+    );
+  const { gladys, minute } = await setup({ periods: [] });
+  webuntis.periods = many();
+  const fired = [];
+  for (let i = 0; i < 4; i += 1) {
+    const before = gladys.fake.sceneEvents.length;
+    await minute(30);
+    fired.push(
+      gladys.fake.sceneEvents.filter((e, n) => n >= before && e.key === SCENE_TRIGGERS.CANCELLED)
+        .length,
+    );
+  }
+  assert.deepEqual(fired, [20, 0, 0, 0]);
 });

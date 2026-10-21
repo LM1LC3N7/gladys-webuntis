@@ -63,12 +63,14 @@ export function lessonData(lesson, today) {
 }
 
 /**
- * The events of a reading. `announced` maps a mark ("c|<lesson>" for a
- * cancellation, "x|<lesson>" for a change) to its value; `baseline` (no
+ * The events of a reading. `announced` maps a mark ("c|<hash of the lesson>"
+ * for a cancellation, "x|<hash of the lesson>" for a change) to its value ("<date>|"
+ * plus, for a change, the hash of what changed): `hash` is a salted HMAC, so
+ * /data never holds a subject, a room, a teacher, a time or a school text; `baseline` (no
  * memory yet) records without firing. Resolves `{ events, marks, unmarks }`:
  * the marks to set and to remove.
  */
-export function readingEvents(lessons, { announced, now, timeZone, baseline = false }) {
+export function readingEvents(lessons, { announced, now, timeZone, hash, baseline = false }) {
   const today = todayOf(now, timeZone);
   const events = [];
   const marks = new Map();
@@ -78,11 +80,12 @@ export function readingEvents(lessons, { announced, now, timeZone, baseline = fa
     if (lesson.endAt <= now) {
       continue;
     }
-    const cancelKey = `c|${lesson.key}`;
-    const changeKey = `x|${lesson.key}`;
+    const lessonHash = hash(lesson.key);
+    const cancelKey = `c|${lessonHash}`;
+    const changeKey = `x|${lessonHash}`;
     if (lesson.status === STATUSES.CANCELLED) {
       if (!announced.has(cancelKey)) {
-        marks.set(cancelKey, lesson.date);
+        marks.set(cancelKey, `${lesson.date}|`);
         if (!baseline && fired.cancelled < MAX_EVENTS_PER_READING) {
           fired.cancelled += 1;
           events.push({ key: SCENE_TRIGGERS.CANCELLED, data: lessonData(lesson, today) });
@@ -95,7 +98,7 @@ export function readingEvents(lessons, { announced, now, timeZone, baseline = fa
       unmarks.push(cancelKey);
     }
     if (lesson.status === STATUSES.CHANGED) {
-      const signature = `${lesson.date}|${changeSignature(lesson)}`;
+      const signature = `${lesson.date}|${hash(changeSignature(lesson))}`;
       if (announced.get(changeKey) !== signature) {
         marks.set(changeKey, signature);
         if (!baseline && fired.changed < MAX_EVENTS_PER_READING) {

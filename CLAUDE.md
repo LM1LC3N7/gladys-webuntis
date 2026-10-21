@@ -61,16 +61,20 @@ test/helpers/             a fake WebUntis behind fetch, fake timers and clock
 - **Be gentle with the school's server.** One reading per `poll_minutes`
   (never below 15); the last attempt is kept in `/data` (written at most once
   a minute) and nothing reads sooner: restart, `connected`, unchanged config,
-  test button. A reading in progress is joined, never doubled. 429/5xx:
-  persisted pause, 60 s to 6 h. A refused login (`-8504`) or unknown school
-  (`-8500`): persisted stop for these credentials (HMAC of the refused ones
-  only, erased at the first success); the test button may try once more after
-  the interval. Never a second login in the same reading.
+  test button. A reading in progress is joined, never doubled; a new
+  configuration waits for the logout of the former reading (one session at a
+  time). 429/5xx: persisted pause, 60 s to 6 h; 401/403: 6 h. ANY JSON-RPC
+  error answer to `authenticate` (except -32601) is final: persisted stop for
+  these credentials (HMAC of the refused ones only, erased only once a login
+  succeeds); the test button may try once more after the interval. Never a
+  second login in the same reading.
 - **Generations.** A reading of a former configuration publishes nothing and
   sets no status (checked after every await).
 - **Events**: one per transition, never on the first reading of a timetable
   (`primed` in `/data`), never for a past lesson, at most 20 per kind per
-  reading; every value a string, a finite number, a boolean or null.
+  reading; every value a string, a finite number, a boolean or null. The
+  marks in `/data` are salted 32-hex hashes plus a date (never a subject,
+  room, teacher, time or text), written at once BEFORE the events leave.
 - **Keys are forever**: manifest keys (`src/constants.js`), trigger fields and
   variables, action outputs, widget settings.
 - **Versions belong to the Release workflow**; 0.1.0 was set by hand for the

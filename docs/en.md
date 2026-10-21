@@ -47,11 +47,16 @@ shares:
   unchanged configuration (the time of the last attempt is kept);
 - when the server answers "too many requests" (429) or has a problem (5xx),
   the readings pause (its Retry-After, or 30 minutes; 6 hours at most), also
-  across a restart;
-- when WebUntis **refuses the username or the password**, nothing more is sent
-  with them, even after a restart, until you change them. The test button may
-  try once more, no sooner than the interval. Several failed logins can lock a
-  WebUntis account: check the password on the school's page first.
+  across a restart; an access refused (401/403) pauses them 6 hours;
+- when WebUntis **refuses the login** (wrong username or password, blocked
+  account, expired password, any other refusal), nothing more is sent with
+  these credentials, even after a restart, until you change them. The test
+  button may try once more, no sooner than the interval; the refusal is only
+  forgotten once a login succeeds. Several failed logins can lock a WebUntis
+  account: check the password on the school's page first.
+
+Widening "days read ahead" announces, at the next reading, the cancellations
+and changes already known on the new days (20 of each kind at most).
 
 ## Dashboard widget "School timetable"
 

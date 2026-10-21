@@ -44,11 +44,15 @@ export const CLASSES_TTL = 24 * 60 * 60_000;
 
 /** Events of one kind fired by one reading at most. */
 export const MAX_EVENTS_PER_READING = 20;
-/** Announced lesson changes remembered at most (in /data). */
-export const MAX_ANNOUNCED = 400;
 /** Lessons kept from one answer at most (a class timetable of two weeks fits easily). */
 export const MAX_LESSONS = 1000;
-/** Longest string of a scene event or an output (the core caps them at 1000). */
+/**
+ * Announced lesson changes remembered at most (in /data, fixed-size hashes):
+ * two per lesson read, so a mark of a lesson still to come is never evicted
+ * (it would be announced again at every reading).
+ */
+export const MAX_ANNOUNCED = 2 * MAX_LESSONS;
+/** Longest string of a scene event (the core caps them at 1000) or an output (10 000). */
 export const MAX_TEXT = 300;
 /** Longest text of the `list` output of "read a school day". */
 export const MAX_LIST_TEXT = 1500;

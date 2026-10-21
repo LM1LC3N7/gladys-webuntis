@@ -81,11 +81,19 @@ export function weekdayOf(date) {
   return WEEKDAYS[(new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7];
 }
 
+/** A number, or a string of digits: never null, '' nor a boolean (Number() makes them 0). */
+const isUntisNumber = (value) =>
+  (typeof value === 'number' && Number.isFinite(value)) ||
+  (typeof value === 'string' && /^\d{1,8}$/.test(value));
+
 /** "2026-10-21" -> 20261021 (the date format of WebUntis). */
 export const untisDate = (date) => Number(date.replaceAll('-', ''));
 
 /** 20261021 -> "2026-10-21"; null when it is not a plausible date. */
 export function dateOfUntis(value) {
+  if (!isUntisNumber(value)) {
+    return null;
+  }
   const n = Number(value);
   if (!Number.isInteger(n) || n < 19700101 || n > 29991231) {
     return null;
@@ -102,6 +110,10 @@ export function dateOfUntis(value) {
 
 /** 755 -> "07:55"; null when it is not a time of day. */
 export function timeOfUntis(value) {
+  // Absent is not midnight.
+  if (!isUntisNumber(value)) {
+    return null;
+  }
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0 || n > 2359 || n % 100 > 59) {
     return null;

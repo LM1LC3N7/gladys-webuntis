@@ -18,9 +18,11 @@ the notes of the version's GitHub Release.
 - One short reading (login, timetable of the coming days, logout) every 30
   minutes by default, 15 at least; never sooner after a restart, a
   reconnection, an unchanged configuration or the test button.
-- Refused credentials or an unknown school stop every request with them, also
-  after a restart, until the configuration changes; 429 and 5xx answers pause
-  the readings (6 hours at most), also after a restart.
+- A refused login (wrong credentials, unknown school, blocked account, any
+  other refusal) stops every request with these credentials, also after a
+  restart, until the configuration changes; the refusal is only forgotten once
+  a login succeeds. 429 and 5xx answers pause the readings (6 hours at most),
+  401/403 for 6 hours, also after a restart.
 - Dashboard widget "School timetable": the lessons of a day, cancellations,
   substitutions and exams.
 - Scene triggers "lesson cancelled", "lesson changed" and "school day starts".
@@ -31,6 +33,8 @@ the notes of the version's GitHub Release.
 
 - The password is sent only to the school's WebUntis server, in the login
   request, over HTTPS, never after a redirection. Nothing logged, shown or
-  stored names the account, the school, a class, a pupil or a lesson.
+  stored names the account, the school, a class, a pupil or a lesson: the
+  memory of the announced changes keeps salted hashes and dates only, written
+  before the events leave. Never two sessions open on the school's server.
 
 [Unreleased]: https://github.com/LM1LC3N7/gladys-webuntis/commits/main

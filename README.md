@@ -30,11 +30,13 @@ Gladys ⇄ SDK ⇄ src/app.js (WebUntisApp)
   least): `authenticate`, `getTimetable` from today to `lookahead_days`, `logout`.
   The time of the last attempt is kept in `/data`: no restart, reconnection,
   unchanged configuration or test button reads sooner. 429 and 5xx pause the
-  readings (persisted, 6 h at most). A refused login (`-8504`) or an unknown
-  school (`-8500`) stops everything for these credentials (persisted, salted
-  fingerprint of the refused credentials only, erased at the first success).
+  readings (persisted, 6 h at most; 6 h for a 401/403). Any error answer to
+  the login (`-8504`, an unknown school `-8500`, a blocked account `-8998`, any
+  other code) stops everything for these credentials (persisted, salted
+  fingerprint of the refused credentials only, erased at the first successful
+  login).
 - **Triggers**: a reading is compared with the memory of what was announced
-  (persisted, ids and dates only): a cancellation fires once, a change once per
+  (persisted as salted fixed-size hashes and dates only): a cancellation fires once, a change once per
   new value; the first reading of a timetable fires nothing. "School day starts"
   is a local minute tick on the lessons read.
 - **Privacy**: no log line, status, error or file in `/data` names the account,

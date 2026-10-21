@@ -149,3 +149,57 @@ test('Retry-After: seconds or a date', () => {
   assert.equal(retryAfterMs('soon', now), undefined);
   assert.equal(retryAfterMs(null, now), undefined);
 });
+
+test('review M2: an error answer for another request is not ours', async () => {
+  webuntis = installWebUntis();
+  webuntis.intercept = (call) =>
+    call.method === 'authenticate'
+      ? json({ jsonrpc: '2.0', id: 'someone-else', error: { code: -8504, message: 'bad' } })
+      : undefined;
+  await rejects(client().readTimetable({ from: 1, to: 2 }), 'protocol');
+});
+
+test('review M3: a long session id is still closed by a logout', async () => {
+  webuntis = installWebUntis();
+  const long = 'A'.repeat(250);
+  webuntis.intercept = (call) =>
+    call.method === 'authenticate'
+      ? (body) =>
+          json({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: { sessionId: long, personType: 5, personId: 42 },
+          })
+      : call.method === 'getTimetable' || call.method === 'logout'
+        ? (body) => json({ jsonrpc: '2.0', id: body.id, result: [] })
+        : undefined;
+  await client().readTimetable({ from: 1, to: 2 });
+  const logout = webuntis.calls.find((c) => c.method === 'logout');
+  assert.equal(logout.cookie, `JSESSIONID=${long}`);
+});
+
+test('review I1: every error answer to the login is final, except "no such method"', async () => {
+  webuntis = installWebUntis();
+  for (const [error, code] of [
+    [{ code: -8998, message: 'user is blocked' }, 'account_blocked'],
+    [{ code: -8502, message: 'expired' }, 'login_refused'],
+    [{ message: 'no code' }, 'login_refused'],
+  ]) {
+    webuntis.intercept = (call) =>
+      call.method === 'authenticate'
+        ? (body) => json({ jsonrpc: '2.0', id: body.id, error })
+        : undefined;
+    await assert.rejects(client().readTimetable({ from: 1, to: 2 }), (err) => {
+      assert.equal(err.code, code);
+      assert.equal(err.final, true);
+      return true;
+    });
+  }
+  webuntis.intercept = (call) =>
+    call.method === 'authenticate'
+      ? (body) => json({ jsonrpc: '2.0', id: body.id, error: { code: -32601, message: 'x' } })
+      : undefined;
+  await rejects(client().readTimetable({ from: 1, to: 2 }), 'not_webuntis');
+  webuntis.intercept = (call) => (call.method === 'authenticate' ? json({}, 401) : undefined);
+  await rejects(client().readTimetable({ from: 1, to: 2 }), 'forbidden');
+});

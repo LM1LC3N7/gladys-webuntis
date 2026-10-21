@@ -127,3 +127,12 @@ test('the day shown and its summary', () => {
   assert.equal(summary.lateStart, true);
   assert.equal(lessonLine(lessons[1], 'fr'), '08:50–09:35 M (R101) · examen');
 });
+
+test('review M6: an absent time or date is not midnight', () => {
+  for (const value of [null, undefined, '', true, false, ' ', '7:55']) {
+    assert.equal(timeOfUntis(value), null, String(value));
+    assert.equal(dateOfUntis(value), null, String(value));
+  }
+  assert.equal(timeOfUntis('755'), '07:55');
+  assert.equal(lessonOf({ id: 1, date: 20261021, startTime: null, endTime: 845 }, BERLIN), null);
+});

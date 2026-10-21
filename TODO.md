@@ -11,6 +11,15 @@ to date at the end of every milestone.
       cancellations, substitutions and exams, widget, three scene triggers,
       one scene action, test button, pacing and persisted pause/stop in
       `/data`, docs en/fr, cover. Tested against made-up answers only.
+- [x] **Review 1 fixes** (2026-10-21): I1 every error answer to the login is
+      a final refusal (blocked account `-8998`, unknown codes), 401/403 pause
+      6 h; I2/I3 marks in `/data` are salted fixed-size hashes and dates; I4
+      marks written at once before the events; M1 refusal erased only after a
+      successful login; M2 the id is checked before the error; M3 long session
+      ids accepted (logout sent); M4 a new reading waits for the logout of the
+      former one; M5 2000 marks kept; M6 an absent time is not midnight; M7
+      comments, regex escapes, docs on widening the days ahead. Tests
+      "review …".
 
 ## Before announcing
 
@@ -31,8 +40,23 @@ to date at the end of every milestone.
 - [ ] `lstype: 'ex'` really marks exams in the timetable of the schools using
       them.
 - [ ] The server accepts the honest `client` name `gladys-webuntis`.
+- [ ] `-8998` is "user is blocked" (taken from the review; any other error
+      code of the login is final anyway).
+- [ ] Session ids are made of `[A-Za-z0-9._~-]` (up to 1024 kept); one with
+      other characters cannot be sent back, so its logout is not sent.
 
 ## Decisions
+
+- (Review 1) A login refusal is final for every JSON-RPC error answer to
+  `authenticate` except "method not found" (no WebUntis there, a configuration
+  error); only the transport errors (network, timeout, 429, 5xx, 401/403) are
+  passing. A 401/403 is not made final (a firewall can answer it for a while)
+  but pauses 6 hours, persisted.
+- (Review 1) A container stopped (SIGTERM) in the middle of a reading cuts it
+  before its logout: the session then expires on the school's server. Not
+  worth delaying the shutdown.
+- (Review 1) Widening the days read ahead announces the changes already known
+  on the new days (at most 20 of each kind): accepted, said in the docs.
 
 - Version 0.1.0 set by hand in `package.json`, `package-lock.json`, the
   manifest and the `docker_image` tag; the first Release (patch) gives 0.1.1.

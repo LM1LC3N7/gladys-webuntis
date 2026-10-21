@@ -9,8 +9,9 @@
 //   Never any fingerprint of credentials that worked;
 // - `scope`: a fingerprint of the timetable read (server, school, account,
 //   class; no password), so that the memory below belongs to it;
-// - `announced`: the lesson changes already announced (lesson ids, dates and
-//   the school's short names), `dayStart`: the last day announced, and
+// - `announced`: the lesson changes already announced, as salted hashes of a
+//   fixed size and dates only (never a subject, a room, a teacher, a time or
+//   a school text), `dayStart`: the last day announced, and
 //   `primed`: this timetable was read once (its first reading fires nothing).
 // No timetable, no name, no password, no session. Bounded when read back.
 // The file is readable by the container user only (0600).
@@ -29,7 +30,7 @@ export function fileStore(path = STATE_FILE) {
     async load() {
       try {
         const text = await readFile(path, 'utf8');
-        return text.length > 256 * 1024 ? null : JSON.parse(text);
+        return text.length > 512 * 1024 ? null : JSON.parse(text);
       } catch {
         return null;
       }
@@ -64,7 +65,11 @@ export function memoryStore(initial = null) {
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const HEX64 = /^[0-9a-f]{64}$/;
+const REFUSAL_CODES = ['bad_credentials', 'unknown_school', 'account_blocked', 'login_refused'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** A mark: `c|` or `x|` and the hash of a lesson; its value: `<date>|` and, for a change, a hash. */
+const MARK_KEY = /^[cx]\|[0-9a-f]{32}$/;
+const MARK_VALUE = /^\d{4}-\d{2}-\d{2}\|(?:[0-9a-f]{32})?$/;
 
 /** The persisted state, repaired and bounded (`now` caps what lies in the future). */
 export function normalizeMemory(raw, now) {
@@ -86,14 +91,14 @@ export function normalizeMemory(raw, now) {
       Number.isFinite(pause.until) && pause.until > now
         ? {
             until: Math.min(pause.until, now + PACING.PAUSE_MAX),
-            reason: pause.reason === 'server' ? 'server' : 'rate_limited',
+            reason: ['server', 'forbidden'].includes(pause.reason) ? pause.reason : 'rate_limited',
           }
         : null,
     refused:
       typeof refused.hash === 'string' && HEX64.test(refused.hash)
         ? {
             hash: refused.hash,
-            code: refused.code === 'unknown_school' ? 'unknown_school' : 'bad_credentials',
+            code: REFUSAL_CODES.includes(refused.code) ? refused.code : 'bad_credentials',
             at: Number.isFinite(refused.at) ? Math.min(refused.at, now) : now,
           }
         : null,
@@ -104,9 +109,9 @@ export function normalizeMemory(raw, now) {
           (entry) =>
             Array.isArray(entry) &&
             typeof entry[0] === 'string' &&
-            entry[0].length <= 200 &&
+            MARK_KEY.test(entry[0]) &&
             typeof entry[1] === 'string' &&
-            entry[1].length <= 400,
+            MARK_VALUE.test(entry[1]),
         )
         .slice(-MAX_ANNOUNCED),
     ),
@@ -135,6 +140,9 @@ const hmac = (salt, parts) =>
 /** The fingerprint of credentials, kept only once WebUntis refused them. */
 export const credentialsHash = (salt, config) =>
   hmac(salt, ['credentials', config.server, config.school, config.username, config.password]);
+
+/** The fixed-size hash of the marks: a lesson or a change, never in clear in /data. */
+export const markHasher = (salt) => (text) => hmac(salt, ['mark', text]).slice(0, 32);
 
 /** Which timetable is read: no password in it. */
 export const scopeHash = (salt, config) =>

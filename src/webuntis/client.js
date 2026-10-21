@@ -25,6 +25,8 @@ export const RPC_CODES = {
   NOT_LOGGED_IN: -8520,
   NO_RIGHT: -8509,
   INVALID_SCHOOL: -8500,
+  /** "user is blocked" (to confirm with a real account). */
+  ACCOUNT_BLOCKED: -8998,
   DATE_NOT_ALLOWED: [-7004, -8507],
 };
 
@@ -52,7 +54,9 @@ export class WebUntisError extends Error {
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 /** A session id fit for a Cookie header (no separator, no line break). */
-const SESSION_ID = /^[A-Za-z0-9._~-]{1,200}$/;
+// Long ids are accepted (a server may use them): a login whose session could not be closed
+// would leave it open on the school's server.
+const SESSION_ID = /^[A-Za-z0-9._~-]{1,1024}$/;
 
 /** A transport failure as a WebUntisError (429 and 5xx pause, the rest is retried later). */
 function fromHttp(err) {
@@ -64,6 +68,10 @@ function fromHttp(err) {
   }
   if (err.kind === 'http' && err.status >= 500) {
     return new WebUntisError('server', `HTTP ${err.status}`, { retryAfter: err.retryAfter });
+  }
+  if (err.kind === 'http' && (err.status === 401 || err.status === 403)) {
+    // Refused at the HTTP level (a firewall, a locked account...): a long pause, never a loop.
+    return new WebUntisError('forbidden', `HTTP ${err.status}`);
   }
   if (err.kind === 'http' && err.status === 404) {
     // No WebUntis at this address (or not this path): a configuration error.
@@ -105,15 +113,40 @@ function fromRpc(error) {
     return new WebUntisError('protocol', 'Method not found', { rpcCode: code });
   }
   return new WebUntisError('remote', `WebUntis error ${Number.isFinite(code) ? code : '?'}`, {
-    rpcCode: Number.isFinite(code) ? code : undefined,
+    // null: an error answer without a usable code (still an answer of the server).
+    rpcCode: Number.isFinite(code) ? code : null,
   });
+}
+
+/**
+ * A failed login. Any JSON-RPC error answer to `authenticate` that is not
+ * clearly passing is a refusal, final: a locked account (-8998, "user is
+ * blocked"), an expired password, a second factor, an unknown code... are
+ * never tried again by themselves (each try could extend a lock or alert the
+ * school). Only the transport errors (network, timeout, 429, 5xx, 401/403)
+ * and a garbled answer are not.
+ */
+function loginError(err) {
+  if (!(err instanceof WebUntisError) || err.final || err.rpcCode === undefined) {
+    return err;
+  }
+  if (err.rpcCode === RPC_CODES.METHOD_NOT_FOUND) {
+    return new WebUntisError('not_webuntis', 'No WebUntis JSON-RPC here', { rpcCode: err.rpcCode });
+  }
+  if (err.rpcCode === RPC_CODES.ACCOUNT_BLOCKED) {
+    return new WebUntisError('account_blocked', 'Account blocked', {
+      final: true,
+      rpcCode: err.rpcCode,
+    });
+  }
+  return new WebUntisError('login_refused', 'Login refused', { final: true, rpcCode: err.rpcCode });
 }
 
 /** Folded for a class name lookup: case, accents and spaces do not matter. */
 export const fold = (value) =>
   String(value ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, '')
     .toLowerCase();
 
@@ -150,12 +183,13 @@ export class WebUntisClient {
     if (!isObject(body)) {
       throw new WebUntisError('protocol', 'Unexpected answer');
     }
-    if (Object.hasOwn(body, 'error') && body.error !== null && body.error !== undefined) {
-      throw fromRpc(body.error);
-    }
-    // remote.py `_parse_result`: the id must be the one sent.
+    // remote.py `_parse_result`: the id must be the one sent, before anything
+    // else (an error answer for another request is not ours).
     if (body.id !== id) {
       throw new WebUntisError('protocol', 'The answer is for another request');
+    }
+    if (Object.hasOwn(body, 'error') && body.error !== null && body.error !== undefined) {
+      throw fromRpc(body.error);
     }
     if (!Object.hasOwn(body, 'result')) {
       throw new WebUntisError('protocol', 'Answer without a result');
@@ -165,11 +199,16 @@ export class WebUntisClient {
 
   /** session.py `login`: the session id and who logged in. */
   async authenticate() {
-    const result = await this.call('authenticate', {
-      user: this.username,
-      password: this.password,
-      client: CLIENT_NAME,
-    });
+    let result;
+    try {
+      result = await this.call('authenticate', {
+        user: this.username,
+        password: this.password,
+        client: CLIENT_NAME,
+      });
+    } catch (err) {
+      throw loginError(err);
+    }
     if (!isObject(result) || typeof result.sessionId !== 'string') {
       throw new WebUntisError('protocol', 'Login answered without a session');
     }
@@ -233,11 +272,14 @@ export class WebUntisClient {
 
   /**
    * One reading: the periods from `from` to `to` (WebUntis dates, 20261021),
-   * as WebUntis returns them (see model.js). Resolves
+   * as WebUntis returns them (see model.js); `onLogin` runs once the login
+   * succeeded. Resolves
    * `{ periods, outsideSchoolYear }`.
    */
-  async readTimetable({ from, to, className }) {
+  async readTimetable({ from, to, className, onLogin }) {
     const login = await this.authenticate();
+    // The login worked: a former refusal can be forgotten, whatever comes next.
+    onLogin?.();
     try {
       const element = await this.element(login, className, login.sessionId);
       let periods;

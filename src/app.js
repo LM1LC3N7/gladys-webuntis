@@ -25,6 +25,7 @@ import { T } from './i18n.js';
 import {
   credentialsHash,
   fileStore,
+  markHasher,
   normalizeMemory,
   scopeHash,
   serializeMemory,
@@ -36,6 +37,14 @@ import { lessonsOf } from './webuntis/model.js';
 import { messageWidget, timetableWidget } from './widget.js';
 
 const defaultTimers = { setTimeout, clearTimeout, setInterval, clearInterval };
+
+/** The final refusals of a login, as the status shows them. */
+const REFUSALS = {
+  bad_credentials: T.badCredentials,
+  unknown_school: T.unknownSchool,
+  account_blocked: T.accountBlocked,
+  login_refused: T.loginRefused,
+};
 
 /** The errors that need the configuration changed (not the password): no retry until then. */
 const CONFIG_ERRORS = {
@@ -281,16 +290,20 @@ export class WebUntisApp {
 
   /**
    * One reading at a time: a second call joins the one in progress. A reading
-   * of a former configuration does not hold the new one back (it will
-   * publish nothing).
+   * of a former configuration publishes nothing, but the new one waits for
+   * its end (its logout): never two sessions open on the school's server.
    */
   read() {
     if (!this.readingCurrent()) {
-      const promise = this.doRead().finally(() => {
-        if (this.reading === promise) {
-          this.reading = undefined;
-        }
-      });
+      const previous = this.reading ?? Promise.resolve();
+      const promise = previous
+        .catch(() => {})
+        .then(() => this.doRead())
+        .finally(() => {
+          if (this.reading === promise) {
+            this.reading = undefined;
+          }
+        });
       this.reading = promise;
       this.readingGeneration = this.generation;
     }
@@ -314,6 +327,7 @@ export class WebUntisApp {
         from: untisDate(today),
         to: untisDate(addDays(today, config.lookaheadDays)),
         className: config.className,
+        onLogin: () => this.loggedIn(config, generation),
       });
     } catch (err) {
       if (generation === this.generation) {
@@ -327,9 +341,8 @@ export class WebUntisApp {
     }
     const lessons = lessonsOf(result.periods, config.timeZone);
     const readAt = this.now();
-    // Erasing a refusal or a pause is written at once.
-    const cleared = memory.refused !== null || memory.pause !== null;
-    memory.refused = null;
+    // Erasing a pause is written at once (a refusal is erased at the login).
+    const cleared = memory.pause !== null;
     memory.pause = null;
     this.lastError = undefined;
     this.lessons = lessons;
@@ -341,6 +354,7 @@ export class WebUntisApp {
       timeZone: config.timeZone,
       // The first reading of a timetable only remembers (persisted: a restart keeps it).
       baseline: !memory.primed,
+      hash: markHasher(memory.salt),
     });
     memory.primed = true;
     for (const key of unmarks) {
@@ -350,7 +364,9 @@ export class WebUntisApp {
       memory.announced.set(key, value);
     }
     pruneAnnounced(memory.announced, todayOf(readAt, config.timeZone));
-    await this.persist({ urgent: cleared });
+    // The marks are on disk before the events leave: a crash right after the
+    // publication never fires them again.
+    await this.persist({ urgent: cleared || marks.size > 0 || unmarks.length > 0 });
     if (generation !== this.generation) {
       return;
     }
@@ -373,11 +389,15 @@ export class WebUntisApp {
       this.lessons = undefined;
       this.readAt = undefined;
       await this.persist({ urgent: true });
-    } else if (code === 'rate_limited' || code === 'server') {
-      const wait = Math.min(
-        PACING.PAUSE_MAX,
-        Math.max(PACING.PAUSE_MIN, err.retryAfter ?? PACING.PAUSE_DEFAULT),
-      );
+    } else if (code === 'rate_limited' || code === 'server' || code === 'forbidden') {
+      // A 401/403 (a firewall, a locked account) waits the longest pause.
+      const wait =
+        code === 'forbidden'
+          ? PACING.PAUSE_MAX
+          : Math.min(
+              PACING.PAUSE_MAX,
+              Math.max(PACING.PAUSE_MIN, err.retryAfter ?? PACING.PAUSE_DEFAULT),
+            );
       memory.pause = { until: this.now() + wait, reason: code };
       await this.persist({ urgent: true });
     } else if (CONFIG_ERRORS[code]) {
@@ -386,6 +406,23 @@ export class WebUntisApp {
     this.lastError = code;
     if (generation === this.generation) {
       await this.reportStatus();
+    }
+  }
+
+  /**
+   * The login worked: the refusal of these credentials (if any) is erased, at
+   * once. Never before a login succeeded (a test click that meets a network
+   * error keeps the refusal).
+   */
+  loggedIn(config, generation) {
+    const { memory } = this;
+    // A login of a former configuration only erases the refusal of its own credentials.
+    const ours =
+      generation === this.generation ||
+      memory.refused?.hash === credentialsHash(memory.salt, config);
+    if (memory.refused && ours) {
+      memory.refused = null;
+      this.persist({ urgent: true });
     }
   }
 
@@ -436,7 +473,7 @@ export class WebUntisApp {
     if (this.refused()) {
       return {
         connected: false,
-        message: this.memory.refused.code === 'unknown_school' ? T.unknownSchool : T.badCredentials,
+        message: REFUSALS[this.memory.refused.code] ?? T.badCredentials,
       };
     }
     if (this.configError) {
@@ -447,7 +484,9 @@ export class WebUntisApp {
     if (this.memory.pause && this.memory.pause.until > this.now()) {
       return {
         connected: false,
-        message: T.paused(Math.max(1, Math.ceil((this.memory.pause.until - this.now()) / 60_000))),
+        message: (this.memory.pause.reason === 'forbidden' ? T.forbidden : T.paused)(
+          Math.max(1, Math.ceil((this.memory.pause.until - this.now()) / 60_000)),
+        ),
       };
     }
     if (this.lastError) {
@@ -551,8 +590,8 @@ export class WebUntisApp {
     const spaced = !last || this.now() - last >= interval;
     const pausedNow = this.memory.pause && this.memory.pause.until > this.now();
     if (this.refused() && spaced && !pausedNow) {
-      // One spaced new try with the refused credentials, on the user's click.
-      this.memory.refused = null;
+      // One spaced new try with the refused credentials, on the user's click;
+      // the refusal stays until a login succeeds.
       await this.read();
       await this.reportStatus();
       return T.testRead(this.statusOf().message);

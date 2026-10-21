@@ -51,12 +51,19 @@ de l'école, que tous les élèves partagent :
   tentative est conservée) ;
 - quand le serveur répond « trop de requêtes » (429) ou a un problème (5xx),
   les lectures se mettent en pause (son Retry-After, ou 30 minutes ; 6 heures
-  au plus), y compris à travers un redémarrage ;
-- quand WebUntis **refuse l'identifiant ou le mot de passe**, plus rien n'est
-  envoyé avec eux, même après un redémarrage, tant que vous ne les changez pas.
-  Le bouton de test peut réessayer une fois, pas avant la fin de l'intervalle.
+  au plus), y compris à travers un redémarrage ; un accès refusé (401/403) les
+  met en pause 6 heures ;
+- quand WebUntis **refuse la connexion** (identifiant ou mot de passe faux,
+  compte bloqué, mot de passe expiré, tout autre refus), plus rien n'est
+  envoyé avec ces identifiants, même après un redémarrage, tant que vous ne
+  les changez pas. Le bouton de test peut réessayer une fois, pas avant la fin
+  de l'intervalle ; le refus n'est oublié qu'après une connexion réussie.
   Plusieurs connexions ratées peuvent bloquer un compte WebUntis : vérifiez
   d'abord le mot de passe sur la page de l'école.
+
+Élargir « jours lus à l'avance » annonce, à la lecture suivante, les
+annulations et modifications déjà connues des nouveaux jours (20 de chaque
+sorte au plus).
 
 ## Widget « Emploi du temps »
 
