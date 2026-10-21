@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-21
+
 ### Added
 
 - Connection to a school's WebUntis server through its JSON-RPC interface,
@@ -37,4 +39,5 @@ the notes of the version's GitHub Release.
   memory of the announced changes keeps salted hashes and dates only, written
   before the events leave. Never two sessions open on the school's server.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-webuntis/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-webuntis/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-webuntis/releases/tag/v0.1.1

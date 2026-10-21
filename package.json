@@ -1,6 +1,6 @@
 {
   "name": "gladys-webuntis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "WebUntis for Gladys Assistant: the school timetable on the dashboard, scene triggers when a lesson is cancelled or changed and when the school day starts. Read only.",
   "type": "module",
