@@ -42,8 +42,8 @@ export const T = {
     fr: `En attente de la prochaine lecture à ${next} : le serveur de l’école n’est jamais lu plus souvent que l’intervalle.`,
   }),
   badCredentials: {
-    en: 'WebUntis refused the username or the password: nothing more is sent with them. Check them on the WebUntis page of the school, then save the configuration.',
-    fr: 'WebUntis a refusé l’identifiant ou le mot de passe : plus rien n’est envoyé avec eux. Vérifiez-les sur la page WebUntis de l’école, puis enregistrez la configuration.',
+    en: 'WebUntis refused the username or the password: nothing more is sent with them. Check them on the WebUntis page of the school, then save the configuration, or click "Test the connection" (one try, no sooner than the interval).',
+    fr: 'WebUntis a refusé l’identifiant ou le mot de passe : plus rien n’est envoyé avec eux. Vérifiez-les sur la page WebUntis de l’école, puis enregistrez la configuration, ou cliquez sur « Tester la connexion » (un essai, pas avant la fin de l’intervalle).',
   },
   unknownSchool: {
     en: 'WebUntis does not know this school name on this server: copy the school name from the WebUntis page (the "school=" part of its address), then save the configuration.',
@@ -54,8 +54,8 @@ export const T = {
     fr: 'WebUntis indique que ce compte est bloqué : plus rien n’est envoyé avec lui. Débloquez-le sur la page WebUntis de l’école (ou demandez à l’école), puis cliquez sur « Tester la connexion » (un essai, pas avant la fin de l’intervalle).',
   },
   loginRefused: {
-    en: 'WebUntis refused the login: nothing more is sent with these credentials. Check the account on the WebUntis page of the school (expired password, second factor...), then save the configuration.',
-    fr: 'WebUntis a refusé la connexion : plus rien n’est envoyé avec ces identifiants. Vérifiez le compte sur la page WebUntis de l’école (mot de passe expiré, double authentification…), puis enregistrez la configuration.',
+    en: 'WebUntis refused the login: nothing more is sent with these credentials. Check the account on the WebUntis page of the school (expired password, second factor...), then save the configuration, or click "Test the connection" (one try, no sooner than the interval).',
+    fr: 'WebUntis a refusé la connexion : plus rien n’est envoyé avec ces identifiants. Vérifiez le compte sur la page WebUntis de l’école (mot de passe expiré, double authentification…), puis enregistrez la configuration, ou cliquez sur « Tester la connexion » (un essai, pas avant la fin de l’intervalle).',
   },
   forbidden: (minutes) => ({
     en: `The school’s server refused the access (HTTP 401/403): paused for ${minutes} min.`,

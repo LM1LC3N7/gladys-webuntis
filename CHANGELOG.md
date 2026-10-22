@@ -10,6 +10,13 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+### Fixed
+
+- The status after a refused login now also says to click "Test the
+  connection" (one try, no sooner than the interval): saving an unchanged
+  configuration reruns nothing, so a refusal settled on the school's side
+  (account unblocked, second factor removed) was stuck.
+
 ## [0.1.1] - 2026-10-21
 
 ### Added

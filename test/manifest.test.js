@@ -17,6 +17,7 @@ import {
   WIDGETS,
 } from '../src/constants.js';
 import { BOUNDS, DEFAULTS } from '../src/config.js';
+import { T } from '../src/i18n.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const manifest = JSON.parse(read('gladys-assistant-integration.json'));
@@ -40,11 +41,12 @@ function* texts(node, path = '') {
   }
 }
 
-test('the store basics; version 0.1.0 everywhere', () => {
+test('the store basics; one version everywhere', () => {
   assert.equal(manifest.manifest_version, 1);
   assert.equal(manifest.type, 'provider');
   assert.match(manifest.gladys_version, />=5\.1\.0/);
-  assert.equal(manifest.version, '0.1.0');
+  // Set by the Release workflow (0.1.0 by hand at the first milestone).
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(pkg.version, manifest.version);
   assert.equal(lock.version, manifest.version);
   assert.equal(lock.packages[''].version, manifest.version);
@@ -146,4 +148,19 @@ test('read only: no device, no command, no widget button', () => {
   assert.equal(index.includes('onSetValue'), false);
   assert.equal(index.includes('onWidgetAction'), false);
   assert.equal(index.includes('publishDiscoveredDevices'), false);
+});
+
+test('0.1.2: every login refusal points to the test button (saving an unchanged configuration reruns nothing)', () => {
+  for (const key of ['badCredentials', 'loginRefused', 'accountBlocked']) {
+    assert.match(
+      T[key].en,
+      /click "Test the connection" \(one try, no sooner than the interval\)/,
+      key,
+    );
+    assert.match(
+      T[key].fr,
+      /cliquez sur « Tester la connexion » \(un essai, pas avant la fin de l’intervalle\)/,
+      key,
+    );
+  }
 });
