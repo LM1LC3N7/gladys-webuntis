@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-22
+
 ### Fixed
 
 - The status after a refused login now also says to click "Test the
@@ -46,5 +48,6 @@ the notes of the version's GitHub Release.
   memory of the announced changes keeps salted hashes and dates only, written
   before the events leave. Never two sessions open on the school's server.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-webuntis/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/LM1LC3N7/gladys-webuntis/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/LM1LC3N7/gladys-webuntis/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LM1LC3N7/gladys-webuntis/releases/tag/v0.1.1
